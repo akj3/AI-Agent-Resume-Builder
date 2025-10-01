@@ -1,0 +1,193 @@
+:root {
+  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  color-scheme: light dark;
+  color: rgba(255, 255, 255, 0.87);
+  background-color: #242424;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+a {
+  font-weight: 500;
+  color: #646cff;
+  text-decoration: inherit;
+}
+a:hover {
+  color: #535bf2;
+}
+
+html, body, #root { height: 100%; width: 100%; }
+body {
+  margin: 0;
+  display: block;     
+  min-width: 0;    
+  min-height: 100vh;
+  background: #0b1220;
+}
+
+
+h1 {
+  font-size: 3.2em;
+  line-height: 1.1;
+}
+
+button {
+  border-radius: 8px;
+  border: 1px solid transparent;
+  padding: 0.6em 1.2em;
+  font-size: 1em;
+  font-weight: 500;
+  font-family: inherit;
+  background-color: #1a1a1a;
+  cursor: pointer;
+  transition: border-color 0.25s;
+}
+button:hover {
+  border-color: #646cff;
+}
+button:focus,
+button:focus-visible {
+  outline: 4px auto -webkit-focus-ring-color;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    color: #213547;
+    background-color: #ffffff;
+  }
+  a:hover {
+    color: #747bff;
+  }
+  button {
+    background-color: #f9f9f9;
+  }
+}
+
+html, body, #root { height: 100%; width: 100%; }
+body {
+  margin: 0;
+  display: block;
+  min-height: 100vh;
+  background: #0b1220;
+}
+
+@media (min-width: 900px) {
+  .page-grid {
+    display: grid;
+    grid-template-columns: 380px 1fr;
+    gap: 28px;
+    align-items: start;
+  }
+}
+@media (max-width: 899.98px) {
+  .page-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+}
+
+/* keep long keys from overflowing */
+.break-anywhere { word-break: break-word; overflow-wrap: anywhere; }
+
+/* nice hover on document rows */
+li:hover { background: rgba(255,255,255,0.02); border-color: #2b3a64; }
+
+
+/* ===== Landing (single, authoritative block) ===== */
+#root { isolation: isolate; }            /* make sure z-index works predictably */
+
+.landing {
+  position: relative;
+  min-height: 100vh;
+  width: 100%;
+  display: grid;
+  place-items: center;
+  background: #0b0e14;                  /* hero background */
+  overflow: hidden;
+  transition: opacity .45s ease, filter .45s ease;
+  z-index: 0;                           /* base layer */
+}
+
+.landing-exit { opacity: 0; filter: blur(6px); }
+
+.landing-inner {
+  position: relative;
+  z-index: 3;                           /* above the glow, guaranteed */
+  text-align: center;
+  padding: 0 24px;
+  max-width: 1100px;
+  color: #e8ebf5;                        /* default text color as a fallback */
+}
+
+.landing-title {
+  margin: 0 0 10px;
+  font-size: clamp(44px, 7.2vw, 92px);
+  font-weight: 700;
+  letter-spacing: .2px;
+  color: #e8ebf5;
+}
+
+.landing-sub {
+  margin: 0 0 28px;
+  font-size: clamp(16px, 2.2vw, 22px);
+  color: #b6c0d9;
+}
+
+.landing-cta {
+  border: 1px solid rgba(255,255,255,.18);
+  background: rgba(15, 17, 24, .75);
+  color: #ffffff;
+  padding: 12px 22px;
+  border-radius: 10px;
+  font-weight: 600;
+  letter-spacing: .2px;
+  cursor: pointer;
+  box-shadow: 0 8px 28px rgba(0,0,0,.35);
+  transition: transform .18s ease, box-shadow .18s ease, background .25s ease, border-color .25s ease;
+  backdrop-filter: blur(6px) saturate(120%);
+}
+.landing-cta:hover {
+  transform: translateY(-1px);
+  border-color: rgba(255,255,255,.35);
+  background: rgba(20, 22, 30, .85);
+  box-shadow: 0 12px 36px rgba(0,0,0,.45);
+}
+
+/* animated glow safely behind text */
+.landing-glow {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: min(70vw, 800px);
+  height: min(70vw, 800px);
+  border-radius: 50%;
+  filter: blur(60px);
+  opacity: .9;
+  z-index: 1;                           /* below .landing-inner */
+  pointer-events: none;
+
+  background:
+    radial-gradient(closest-side at 50% 50%, rgba(18, 180, 255, .9), transparent 60%),
+    radial-gradient(closest-side at 65% 40%, rgba(155, 111, 255, .7), transparent 60%),
+    radial-gradient(closest-side at 35% 60%, rgba(255, 111, 170, .6), transparent 60%),
+    radial-gradient(closest-side at 50% 50%, rgba(255, 212, 121, .4), transparent 60%);
+  animation: glow-pulse 9s ease-in-out infinite;
+}
+
+@keyframes glow-pulse {
+  0%   { transform: scale(.98) translateY(0);   opacity: .85; filter: blur(60px); }
+  50%  { transform: scale(1.05) translateY(-8px); opacity: .95; filter: blur(70px); }
+  100% { transform: scale(.98) translateY(0);   opacity: .85; filter: blur(60px); }
+}
+
+/* keep route backgrounds consistent */
+:root, body, #root { background-color: #0b1220; }
+
+

@@ -1,0 +1,20 @@
+{
+  "name": "resume-ui",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "proxy": "node proxy.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "type": "module",
+  "dependencies": {
+    "@aws-sdk/credential-providers": "^3.891.0",
+    "aws4": "^1.13.2",
+    "express": "^5.1.0",
+    "node-fetch": "^3.3.2"
+  }
+}
