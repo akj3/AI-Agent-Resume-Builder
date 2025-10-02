@@ -1,7 +1,5 @@
 # AI-Agent-Resume-Builder
 
-# AI-Agent-Resume-Builder
-
 An AI-powered project designed to help users automatically generate, edit, and tailor resumes for different job applications. The goal of this project is to simplify the resume-building process by leveraging AI agents to structure professional experiences, skills, and projects into clear, concise, and ATS-friendly resumes.
 
 ## Features
