@@ -3,63 +3,66 @@ name: Deploy UI to S3 + CloudFront
 on:
   push:
     branches: [ main ]
-  workflow_dispatch:
-
-permissions:
-  id-token: write    # for OIDC
-  contents: read
+  workflow_dispatch: {}
 
 env:
-  # Build-time env for Vite
-  VITE_API_BASE: ${{ secrets.VITE_API_BASE }}
+  S3_BUCKET: resume-assistant-bucket-arber
+  CLOUDFRONT_DISTRIBUTION_ID: E190EOCBX3X6EN
 
 jobs:
-  build-and-deploy:
+  deploy:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Use Node
+      - name: Use Node 20
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: '20'
 
       - name: Install deps
         working-directory: ./resume-ui-app/resume-ui-app
         run: npm ci
 
-      - name: Build (Vite)
+      - name: Build (Vite) with API base from secret
         working-directory: ./resume-ui-app/resume-ui-app
         env:
           VITE_API_BASE: ${{ secrets.VITE_API_BASE }}
         run: npm run build
 
-      - name: Configure AWS (OIDC)
+      # Configure AWS creds via OIDC; no long-lived secrets in GitHub
+      - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.GHA_AWS_ROLE_ARN }}
-          aws-region: ${{ secrets.AWS_REGION }}
+          role-to-assume: arn:aws:iam::913305982102:role/GitHubActionsS3Deployer
+          aws-region: us-east-2
 
-      - name: Upload static assets with long cache
+      # Upload the static build to S3 (immutable assets cache forever, html no-cache)
+      - name: Sync assets (immutable) - set long cache
         run: |
-          aws s3 sync ./resume-ui-app/resume-ui-app/dist s3://${{ secrets.S3_BUCKET }} \
+          aws s3 sync ./resume-ui-app/resume-ui-app/dist s3://$S3_BUCKET \
             --delete \
-            --exclude "index.html" \
+            --exclude "*.html" \
             --cache-control "public, max-age=31536000, immutable" \
-            --metadata-directive REPLACE
+            --only-show-errors
 
-      - name: Upload index.html (short cache)
+      - name: Upload HTML (short cache)
         run: |
-          aws s3 cp ./resume-ui-app/resume-ui-app/dist/index.html s3://${{ secrets.S3_BUCKET }}/index.html \
-            --cache-control "no-cache, no-store, must-revalidate" \
-            --content-type "text/html" \
-            --metadata-directive REPLACE
+          find ./resume-ui-app/resume-ui-app/dist -name "*.html" -print0 | \
+          xargs -0 -I{} aws s3 cp "{}" "s3://$S3_BUCKET/{}" \
+            --cache-control "no-cache" \
+            --content-type "text/html; charset=utf-8" \
+            --only-show-errors
 
+      # Invalidate CloudFront so the latest HTML is served
       - name: Invalidate CloudFront
         run: |
           aws cloudfront create-invalidation \
-            --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} \
+            --distribution-id "$CLOUDFRONT_DISTRIBUTION_ID" \
             --paths "/*"
 
