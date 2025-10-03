@@ -1,68 +1,47 @@
-name: Deploy UI to S3 + CloudFront
+name: Deploy to S3 + CloudFront
 
 on:
   push:
-    branches: [ main ]
-  workflow_dispatch: {}
-
-env:
-  S3_BUCKET: resume-assistant-bucket-arber
-  CLOUDFRONT_DISTRIBUTION_ID: E190EOCBX3X6EN
+    branches:
+      - main
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+
     permissions:
       id-token: write
       contents: read
 
     steps:
-      - name: Checkout
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Use Node 20
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: 18
 
-      - name: Install deps
-        working-directory: ./resume-ui-app/resume-ui-app
-        run: npm ci
+      - name: Install dependencies
+        run: npm ci --prefix resume-ui-app/resume-ui-app
 
-      - name: Build (Vite) with API base from secret
-        working-directory: ./resume-ui-app/resume-ui-app
+      - name: Build project
+        run: npm run build --prefix resume-ui-app/resume-ui-app
         env:
           VITE_API_BASE: ${{ secrets.VITE_API_BASE }}
-        run: npm run build
 
-      # Configure AWS creds via OIDC; no long-lived secrets in GitHub
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::913305982102:role/GitHubActionsS3Deployer
           aws-region: us-east-2
 
-      # Upload the static build to S3 (immutable assets cache forever, html no-cache)
-      - name: Sync assets (immutable) - set long cache
+      - name: Sync files to S3
         run: |
-          aws s3 sync ./resume-ui-app/resume-ui-app/dist s3://$S3_BUCKET \
-            --delete \
-            --exclude "*.html" \
-            --cache-control "public, max-age=31536000, immutable" \
-            --only-show-errors
+          aws s3 sync resume-ui-app/resume-ui-app/dist s3://resume-assistant-bucket-arber --delete
 
-      - name: Upload HTML (short cache)
-        run: |
-          find ./resume-ui-app/resume-ui-app/dist -name "*.html" -print0 | \
-          xargs -0 -I{} aws s3 cp "{}" "s3://$S3_BUCKET/{}" \
-            --cache-control "no-cache" \
-            --content-type "text/html; charset=utf-8" \
-            --only-show-errors
-
-      # Invalidate CloudFront so the latest HTML is served
-      - name: Invalidate CloudFront
+      - name: Invalidate CloudFront cache
         run: |
           aws cloudfront create-invalidation \
-            --distribution-id "$CLOUDFRONT_DISTRIBUTION_ID" \
+            --distribution-id E190EOCBX3X6EN \
             --paths "/*"
-
