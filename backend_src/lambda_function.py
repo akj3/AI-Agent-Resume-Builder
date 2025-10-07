@@ -24,6 +24,7 @@ MAX_DOCS_PER_USER = 10  # keep in sync with UI
 ALLOWED_EXTS = ("pdf", "doc", "docx", "txt")
 REGION = os.environ.get("AWS_REGION", "us-east-2")
 
+
 # Tunables for OpenAI HTTP call (env overrideable)
 OPENAI_HTTP_TIMEOUT = float(os.environ.get("OPENAI_HTTP_TIMEOUT", "18.0"))  # seconds per call
 OPENAI_MAX_RETRIES  = int(os.environ.get("OPENAI_MAX_RETRIES", "1"))       # 0 or 1 is sensible here
@@ -31,12 +32,14 @@ OPENAI_MAX_RETRIES  = int(os.environ.get("OPENAI_MAX_RETRIES", "1"))       # 0 o
 # Hard cap all network ops (urllib + sockets)
 socket.setdefaulttimeout(12)
 
+
 # ------------------ Utils ------------------
 def _resp(code, obj):
     def _json_default(o):
         if isinstance(o, decimal.Decimal):
             return int(o) if o % 1 == 0 else float(o)
         raise TypeError(f"Object of type {o.__class__.__name__} is not JSON serializable")
+    # IMPORTANT: Only Content-Type. No CORS headers here.
     return {
         "statusCode": code,
         "headers": {"Content-Type": "application/json"},
@@ -429,6 +432,40 @@ def handle_diag():
         out["steps"].append({"models_error": str(e)})
     return _resp(200 if out["ok"] else 500, out)
 
+def handle_get_document_html(event):
+    """GET /documents/html?userId=...&documentId=... -> returns the HTML body itself.
+       This avoids S3 CORS because the browser talks only to the Lambda URL."""
+    qs = event.get("queryStringParameters") or {}
+    user_id = (qs.get("userId") or "demo").strip()
+    doc_id  = (qs.get("documentId") or "").strip()
+
+    if not (user_id and doc_id):
+        return _resp(400, {"error": "Missing userId or documentId"})
+
+    item = _find_doc_by_id(user_id, doc_id)
+    if not item:
+        return _resp(404, {"error": "Document not found"})
+
+    if not str(item.get("contentType","")).startswith("text/html"):
+        return _resp(415, {"error": "Document is not text/html"})
+
+    key = item.get("s3Key")
+    if not key:
+        return _resp(500, {"error": "Document missing s3Key"})
+
+    try:
+        obj = s3.get_object(Bucket=BUCKET, Key=key)
+        body_bytes = obj["Body"].read()
+    except Exception as e:
+        return _resp(500, {"error": "Failed to read S3 object", "detail": str(e)})
+
+    return {
+        "statusCode": 200,
+        "headers": {"Content-Type": "text/html; charset=utf-8"},
+        "body": body_bytes.decode("utf-8", "replace"),
+    }
+
+
 # ------------------ HTTP entry ------------------
 def lambda_handler(event, context):
     method = (event.get("requestContext", {}).get("http", {}).get("method")
@@ -440,8 +477,9 @@ def lambda_handler(event, context):
     if path.endswith("/") and path != "/":
         path = path[:-1]
 
+    # ✅ Proper preflight
     if method == "OPTIONS":
-        return _resp(200, {"ok": True})
+        return {"statusCode": 200, "body": ""}
 
     if method == "GET" and path == "/health":
         return _resp(200, {"ok": True, "service": "resume-assistant"})
@@ -471,6 +509,10 @@ def lambda_handler(event, context):
 
     if method == "POST" and path == "/tailor":
         return handle_tailor(event)
+    
+    if method == "GET" and path == "/documents/html":
+        return handle_get_document_html(event)
+
 
     return _resp(404, {"error": "Not found", "path": path, "method": method})
 

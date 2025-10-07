@@ -1,0 +1,12 @@
+{
+  "CORSConfiguration": {
+    "CORSRules": [
+      {
+        "AllowedOrigins": ["https://d30ytwvi75kdf4i.cloudfront.net"],
+        "AllowedMethods": ["GET","HEAD"],
+        "AllowedHeaders": ["*"],
+        "MaxAgeSeconds": 86400
+      }
+    ]
+  }
+}

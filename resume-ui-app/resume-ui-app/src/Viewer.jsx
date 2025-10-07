@@ -36,15 +36,12 @@ function normMonthWord(w) {
   return MONTH_MAP[k] || w;
 }
 function normDateRange(raw = "") {
-  // Normalize things like "June. 2022 - May 2025" → "Jun. 2022 – May 2025"
   let s = raw.replace(/[–—-]+/g, " – ").replace(/\s+/g, " ").trim();
   s = s.replace(
     /\b(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\.?/gi,
     (m) => normMonthWord(m)
   );
-  // fix .. artifacts
   s = s.replace(/\.\./g, ".").replace(/- -/g, "–");
-  // ensure en dash
   s = s.replace(/\s-\s/g, " – ");
   return s;
 }
@@ -81,6 +78,9 @@ function pickLinks(allText) {
   return { email, phone, linkedin: li, github: gh, other: rest };
 }
 
+// remove http(s):// without using a literal // (avoids template parsing issues)
+const stripProto = (u) => (u ? u.replace(new RegExp('^https?:\\/\\/', 'i'), '') : '');
+
 // crude but robust “sectionizer”: walk DOM top-down and cut where a heading matches
 function chunkSections(doc) {
   const out = [];
@@ -111,17 +111,14 @@ function chunkSections(doc) {
   return out;
 }
 
-// EDUCATION parsing: try “School — Location … Degree … Dates”
+// EDUCATION parsing
 function parseEducation(lines) {
   const rows = [];
   let buf = [];
   const flush = () => {
     if (!buf.length) return;
     const joined = buf.join(" ");
-    // try patterns
-    // deg line often italics in HTML → here just words; we pick the degree phrase heuristically
     let school = "", loc = "", degree = "", dates = "";
-    // pick dates at end
     const dateHit = joined.match(/(Jan\.|Feb\.|Mar\.|Apr\.|May|Jun\.|Jul\.|Aug\.|Sep\.|Oct\.|Nov\.|Dec\.)\s+\d{4}\s+[–-]\s+(?:Present|\w+\.\s+\d{4}|\d{4})/);
     if (dateHit) {
       dates = normDateRange(dateHit[0]);
@@ -129,13 +126,11 @@ function parseEducation(lines) {
       const yearSpan = joined.match(/\b\d{4}\s+[–-]\s+(?:Present|\d{4})\b/);
       if (yearSpan) dates = normDateRange(yearSpan[0]);
     }
-    // school & location
     const m = joined.match(/^(.+?)\s[–-]\s(.+?),\s*([A-Z]{2})/); // University — City, ST
     if (m) {
       school = m[1];
       loc = `${m[2]}, ${m[3]}`;
     } else {
-      // fallback: up to “University/College …, ST”
       const m2 = joined.match(/^(.+?(?:University|College|Institute|School).+?)(?:\s+|,)\s+([A-Z][a-zA-Z]+,\s*[A-Z]{2})/);
       if (m2) {
         school = m2[1];
@@ -144,7 +139,6 @@ function parseEducation(lines) {
         school = joined.replace(/[,|].*$/, "");
       }
     }
-    // degree guess
     const degHit = joined.match(/\b(Bachelor|Master|B\.Sc\.|M\.Sc\.|BS|BA|MS|Ph\.?D\.?).+?(Science|Arts|Engineering|Computer|CS|Information|Business|[A-Z][a-z]+)(?:,|\s|$).*/i);
     degree = degHit ? degHit[0] : joined;
     rows.push({ school, loc, degree, dates });
@@ -156,13 +150,11 @@ function parseEducation(lines) {
       flush();
       buf.push(l);
     } else {
-      // continuation of previous
       if (!buf.length) buf.push(l);
       else buf.push(l);
     }
   }
   flush();
-  // clean empties
   return rows.map((r) => ({
     school: r.school?.trim() || "",
     loc: r.loc?.trim() || "",
@@ -176,56 +168,39 @@ function parseExperience(lines) {
   const jobs = [];
   let i = 0;
   while (i < lines.length) {
-    let L = lines[i];
-
-    // find candidate header line: company + maybe dates
-    const headIdx = i;
     let company = "", dates = "", role = "", loc = "";
-    // Example shapes to accept:
-    // "FYTA May 2024 – Jul. 2024"
-    // "Software Engineer Intern — Berlin, DE"
-    // We'll scan next 2 lines too
     const window = lines.slice(i, i + 3).join("  ");
-    // dates
-    const dr = window.match(/\b(Jan\.|Feb\.|Mar\.|Apr\.|May|Jun\.|Jul\.|Aug\.|Sep\.|Oct\.|Nov\.|Dec\.|\d{4})[^\n]{0,20}[–-][^\n]{0,20}(Present|\d{4}|Jan\.|Feb\.|Mar\.|Apr\.|May|Jun\.|Jul\.|Aug\.|Sep\.|Oct\.|Nov\.)/);
+    const dr = window.match(/\b(Jan\.|Feb\.|Mar\.|Apr\.|May|Jun\.|Jul\.|Aug\.|Sep\.|Oct\.|Nov\.|\d{4})[^\n]{0,20}[–-][^\n]{0,20}(Present|\d{4}|Jan\.|Feb\.|Mar\.|Apr\.|May|Jun\.|Jul\.|Aug\.|Sep\.|Oct\.|Nov\.)/);
     if (dr) dates = normDateRange(dr[0]);
 
-    // company guess: first block upper/mixed w/o bullet
     company = (lines[i] || "").replace(/[•\-–].*$/, "").trim();
-    // role + loc may be in the next line
     const next = lines[i + 1] || "";
     if (/intern|engineer|developer|manager|lead|scientist/i.test(next)) {
       role = next.replace(/[•\-–].*$/, "").trim();
-      // try trailing location
       const locHit = role.match(/[,–-]\s*([A-Z][A-Za-z]+(?:\s[A-Z][A-Za-z]+)*,\s*[A-Z]{2})$/);
       if (locHit) {
         loc = locHit[1]; role = role.replace(/[,–-]\s*[A-Z].+$/, "").trim();
       }
       i += 2;
     } else {
-      // role might be after company separated by comma/dash
       const rr = company.split(/[–—-]/);
       if (rr.length > 1) { company = rr[0].trim(); role = rr[1].trim(); }
       i += 1;
     }
 
-    // collect bullets until next header cue
     const bullets = [];
     while (i < lines.length) {
       const l = lines[i];
       if (/^(Education|Experience|Projects?|Technical Skills|Skills)\b/i.test(l)) break;
       if (/^[•\-–]\s|^\u2022/.test(l) || l.length < 160) {
-        // treat shorter lines as bullets; split on "•"
         const parts = l.split(/•/).map((x) => x.trim()).filter(Boolean);
         parts.forEach((p) => bullets.push(p));
         i += 1;
       } else break;
     }
 
-    // basic clean
     company = company.replace(/\s{2,}/g, " ");
     role = role.replace(/\s{2,}/g, " ");
-    // push if looks real
     if (company) jobs.push({ company, dates, role, loc, bullets });
   }
   return jobs;
@@ -237,34 +212,29 @@ function parseProjects(lines) {
   let i = 0;
   while (i < lines.length) {
     let title = "", dates = "", stack = "";
-    // expect a heading-ish line first
     const head = lines[i] || "";
     if (!head) { i++; continue; }
-    // split out dates
-    const d = head.match(/\b(Jan\.|Feb\.|Mar\.|Apr\.|May|Jun\.|Jul\.|Aug\.|Sep\.|Oct\.|Nov\.|Dec\.|\d{4}).{0,20}[–-].{0,20}(Present|\d{4})\b/);
+    const d = head.match(/\b(Jan\.|Feb\.|Mar\.|Apr\.|May|Jun\.|Jul\.|Aug\.|Sep\.|Oct\.|Nov\.|\d{4}).{0,20}[–-].{0,20}(Present|\d{4})\b/);
     if (d) {
       dates = normDateRange(d[0]);
       title = head.replace(d[0], "").replace(/[–—-]\s*$/, "").trim();
     } else {
       title = head.trim();
     }
-    // optional stack in bars or after dash
     const st = title.match(/\|\s*([^|]+)$/);
     if (st) { stack = st[1].trim(); title = title.replace(/\|[^|]+$/, "").trim(); }
 
-    // collect bullets (1–5)
     const bullets = [];
     i++;
     while (i < lines.length && bullets.length < 8) {
       const l = lines[i];
       if (!l) { i++; continue; }
       if (/^(Education|Experience|Projects?|Technical Skills|Skills)\b/i.test(l)) break;
-      if (l.length > 250 && !/•|-/.test(l)) break; // probably another header-ish
+      if (l.length > 250 && !/•|-/.test(l)) break;
       const parts = l.split(/•/).map((x) => x.trim()).filter(Boolean);
       if (parts.length) parts.forEach((p) => bullets.push(p));
       else bullets.push(l);
       i++;
-      // break if next line looks like another project title (short)
       if (lines[i] && lines[i].length < 64) break;
     }
 
@@ -273,11 +243,11 @@ function parseProjects(lines) {
   return projects;
 }
 
-// SKILLS parsing: squash into labeled rows if any "Category: a, b, c"
+// SKILLS parsing
 function parseSkills(lines) {
   const txt = lines.join(" ");
   const cats = {};
-  const pairs = txt.split(/\s{2,}|\s*\|\s*/); // try to split on double spaces or pipes
+  const pairs = txt.split(/\s{2,}|\s*\|\s*/);
   pairs.forEach((p) => {
     const m = p.match(/\b([A-Z][A-Za-z ]{2,20})\s*:\s*(.+)$/);
     if (m) {
@@ -288,7 +258,6 @@ function parseSkills(lines) {
   });
   if (Object.keys(cats).length) return cats;
 
-  // fallback: unlabeled -> Languages, Tools, Frameworks via heuristics
   const fallback = {
     Languages: [],
     "Web & Services": [],
@@ -314,13 +283,14 @@ export default function Viewer() {
   const nav = useNavigate();
 
   const [doc, setDoc] = useState(null);
-  const [html, setHtml] = useState("");
+  const [html, setHtml] = useState("");           // filled only when user clicks Get LaTeX
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(true);
 
   const [showLatex, setShowLatex] = useState(false);
   const [copied, setCopied] = useState(false);
 
+  // Load document metadata (but do NOT fetch the presigned URL here)
   useEffect(() => {
     (async () => {
       try {
@@ -332,13 +302,6 @@ export default function Viewer() {
           return;
         }
         setDoc(found);
-
-        if ((found.contentType || "").startsWith("text/html") && found.url) {
-          const res = await fetch(found.url);
-          if (!res.ok) throw new Error(`Fetch failed: ${res.status}`);
-          const txt = await res.text();
-          setHtml(txt);
-        }
       } catch (e) {
         setErr(String(e.message || e));
       } finally {
@@ -346,6 +309,32 @@ export default function Viewer() {
       }
     })();
   }, [documentId, userId]);
+
+  // On-demand fetch for LaTeX generation (only for HTML docs)
+  async function loadHtmlForLatex() {
+  if (!doc?.documentId) {
+    setErr("No document selected");
+    setShowLatex(true);
+    return;
+  }
+  try {
+    setErr("");
+    const url = `${import.meta.env.VITE_API_BASE}/documents/html?` +
+                new URLSearchParams({ userId, documentId }).toString();
+    const res = await fetch(url, { method: "GET" });
+    if (!res.ok) throw new Error(`API ${res.status}`);
+    const json = await res.json();
+    if (!json.html) throw new Error("No HTML returned");
+    setHtml(json.html);
+  } catch (e) {
+    console.warn(e);
+    setHtml("");
+    setErr("Couldn’t read HTML for LaTeX (API).");
+  } finally {
+    setShowLatex(true);
+  }
+}
+
 
   // -------- LaTeX generator (strict) --------
   const latex = useMemo(() => {
@@ -394,12 +383,6 @@ export default function Viewer() {
 \usepackage{tabularx}
 \input{glyphtounicode}
 
-% ---------- FONT (sans, Jake-style) ----------
-% \usepackage[sfdefault]{FiraSans}
-% \usepackage[sfdefault]{roboto}
-% \usepackage[sfdefault]{noto-sans}
-% \usepackage[default]{sourcesanspro}
-
 \pagestyle{fancy}
 \fancyhf{} 
 \fancyfoot{}
@@ -442,12 +425,11 @@ export default function Viewer() {
 \newcommand{\resumeItemListEnd}{\end{itemize}\vspace{-5pt}}
 `;
 
-    // header block
     const contacts = [
       links.phone && lx(links.phone),
       links.email && `\\href{mailto:${lx(links.email)}}{\\underline{${lx(links.email)}}}`,
-      links.linkedin && `\\href{${lx(links.linkedin)}}{\\underline{${lx(links.linkedin.replace(/^https?:\/\//,""))}}}`,
-      links.github && `\\href{${lx(links.github)}}{\\underline{${lx(links.github.replace(/^https?:\/\//,""))}}}`
+      links.linkedin && `\\href{${lx(links.linkedin)}}{\\underline{${lx(stripProto(links.linkedin))}}}`,
+      links.github && `\\href{${lx(links.github)}}{\\underline{${lx(stripProto(links.github))}}}`
     ].filter(Boolean).join(" $|$ ");
 
     const heading = String.raw`
@@ -531,7 +513,7 @@ ${Object.entries(skills).map(([k, v]) =>
 
   // --------------- UI ----------------
   if (loading) return <div style={S.shell}><div style={S.card}>Loading…</div></div>;
-  if (err) return (
+  if (err && !showLatex) return (
     <div style={S.shell}>
       <div style={S.card}>
         <p style={{color:"#f99"}}>{err}</p>
@@ -548,13 +530,15 @@ ${Object.entries(skills).map(([k, v]) =>
         <div style={{display:"flex", justifyContent:"space-between", alignItems:"center"}}>
           <h2 style={{margin:0}}>Viewer</h2>
           <div style={{display:"flex", gap:14, alignItems:"center"}}>
-            <button
-              onClick={() => setShowLatex(true)}
-              style={S.linkBtn}
-              title="Get LaTeX"
-            >
-              ⎘ Get&nbsp;LaTeX
-            </button>
+            {isHtml && (
+              <button
+                onClick={loadHtmlForLatex}
+                style={S.linkBtn}
+                title="Get LaTeX"
+              >
+                ⎘ Get&nbsp;LaTeX
+              </button>
+            )}
             <button onClick={() => nav("/app")} style={S.linkGhost}>← Back</button>
           </div>
         </div>
@@ -563,15 +547,24 @@ ${Object.entries(skills).map(([k, v]) =>
           {doc?.s3Key} • {doc?.contentType} • {doc?.documentId}
         </div>
 
-        {!isHtml && doc?.url && (
-          <div style={{marginTop:16}}>
-            <a href={doc.url} target="_blank" rel="noreferrer" style={S.btn}>Open file</a>
+        {/* ✅ Use the presigned URL directly; no fetch() */}
+        {doc?.url && (
+          <div style={{marginTop:16, height: "80vh"}}>
+            <iframe
+              title="Document"
+              src={doc.url}
+              style={{width:"100%", height:"100%", border:"0", borderRadius:12}}
+            />
           </div>
         )}
 
-        {isHtml && (
-          <div id="resumeHtml" style={S.htmlWrap}
-               dangerouslySetInnerHTML={{ __html: html }} />
+        {/* Fallback open link */}
+        {doc?.url && (
+          <div style={{marginTop:12}}>
+            <a href={doc.url} target="_blank" rel="noreferrer" style={S.btn}>
+              Open in new tab
+            </a>
+          </div>
         )}
       </div>
 
@@ -581,19 +574,20 @@ ${Object.entries(skills).map(([k, v]) =>
           <div style={S.sideHead}>
             <strong>LaTeX (Jake template)</strong>
             <div style={{display:"flex", gap:8}}>
-              <button onClick={copyLatex} style={S.sideBtn}>{copied ? "Copied ✓" : "Copy"}</button>
+              <button onClick={copyLatex} style={S.sideBtn} disabled={!latex}>
+                {copied ? "Copied ✓" : (latex ? "Copy" : "No HTML")}
+              </button>
               <button onClick={() => setShowLatex(false)} style={S.sideBtn}>Close</button>
             </div>
           </div>
           <textarea
             readOnly
-            value={latex}
+            value={latex || (err ? `% ${err}` : "% Click Get LaTeX first")}
             spellCheck={false}
             style={S.codebox}
           />
           <div style={{fontSize:12, color:"#a9b4d0", marginTop:8}}>
-            Tip: paste into Overleaf or your LaTeX tool and compile.  
-            Months/years and headings are normalized; you can tweak text after paste if needed.
+            Tip: The generated LaTex output may not perfectly align with any spacing/grouping parsing that was shown on your original resume. You might need to adjust syntax accordingly.
           </div>
         </div>
       )}
@@ -612,14 +606,6 @@ const S = {
   btn: {
     background:"#2fe6a7", border:"1px solid #2fe6a7", color:"#06291f",
     padding:"10px 12px", borderRadius:10, textDecoration:"none", fontWeight:600
-  },
-  htmlWrap: {
-    marginTop:18,
-    background:"#0f1626",
-    border:"1px solid #233056",
-    borderRadius:12,
-    padding:16,
-    overflowX:"auto",
   },
   linkBtn: {
     background:"transparent", color:"#98b7ff",

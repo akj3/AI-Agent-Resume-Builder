@@ -1,0 +1,7 @@
+{
+  "AllowCredentials": true,
+  "AllowHeaders": ["Content-Type","Authorization","X-Requested-With","Accept","Origin"],
+  "AllowMethods": ["GET","POST","DELETE"],
+  "AllowOrigins": ["https://d30ytwvi75kdf4i.cloudfront.net","http://localhost:5173","http://127.0.0.1:5173"],
+  "MaxAge": 86400
+}

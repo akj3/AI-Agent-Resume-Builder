@@ -206,9 +206,9 @@ export default function App() {
         <div style={styles.leftCol}>
           {/* Upload card */}
           <section style={styles.card}>
-            <h1 style={styles.h1}>Resume Assistant (Local Dev)</h1>
+            <h1 style={styles.h1}>Resume Assistant</h1>
             <p style={styles.subtle}>
-              Backend via local signing proxy (http://localhost:5174)
+              AI Agent Resume Builder has been built by Arber Jonuzi
             </p>
 
             <form onSubmit={onUpload} style={styles.form}>
